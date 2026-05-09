@@ -1297,8 +1297,19 @@ input, select, textarea {
 
 /* New properties for images */
     display: block;        /* Ensures it respects width/height */
-    object-fit: cover;     /* Crops the image to fill the circle without distorting */
-    overflow: hidden;      /* Ensures the image doesn't bleed past the rounded border */
+
+	/* 1. Show the entire image without cropping */
+    object-fit: contain; 
+
+    /* 2. Create space between the logo and the white border */
+    padding: 1rem; 
+
+    /* 3. Ensures padding doesn't make the circle larger than 5.5rem */
+    box-sizing: border-box; 
+
+    /* Optional: If your logo has a transparent background, 
+       you might want to add a background color to the circle */
+    background-color: transparent;
 }
 
 			#header .logo .icon:before {
