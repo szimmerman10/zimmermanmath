@@ -1305,7 +1305,7 @@ input, select, textarea {
 
 #header .logo img {
     /* ADJUST THIS PERCENTAGE TO RESIZE */
-    width: 95%; 
+    width: 85%; 
     
     height: auto;
     display: block;
