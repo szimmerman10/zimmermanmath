@@ -1140,9 +1140,12 @@ input, select, textarea {
 			-ms-transition-delay: 0.75s;
 			transition-delay: 0.75s;
 			background-image: linear-gradient(to top, rgba(19, 21, 25, 0.5), rgba(19, 21, 25, 0.5)), url("../../images/overlay.png");
-			background-size: auto, 256px 256px;
-			background-position: center, center;
-			background-repeat: no-repeat, repeat;
+			background-size: auto,
+ 256px 256px;
+			background-position: center,
+ center;
+			background-repeat: no-repeat,
+ repeat;
 			z-index: 2;
 		}
 
@@ -1656,3 +1659,15 @@ input, select, textarea {
 		body.is-preload #footer {
 			opacity: 0;
 		}
+
+.custom-logo-img {
+    /* Match the height to the old font-size */
+    height: 1em; 
+    width: auto;
+    
+    /* This ensures the image sits on the same "line" as text/icons */
+    vertical-align: middle; 
+    
+    /* If the original icon had a specific color, 
+       remember your image will use its own colors! */
+}
