@@ -1294,22 +1294,21 @@ input, select, textarea {
     height: 5.5rem;
     border: solid 1px #ffffff;
     border-radius: 100%;
+    
+    /* These three lines center the image perfectly */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    
+    overflow: hidden; /* Ensures nothing pokes out of the circle */
+}
 
-/* New properties for images */
-    display: block;        /* Ensures it respects width/height */
-
-	/* 1. Show the entire image without cropping */
-    object-fit: contain; 
-
-    /* 2. Create space between the logo and the white border */
-    padding: 1rem; 
-
-    /* 3. Ensures padding doesn't make the circle larger than 5.5rem */
-    box-sizing: border-box; 
-
-    /* Optional: If your logo has a transparent background, 
-       you might want to add a background color to the circle */
-    background-color: transparent;
+#header .logo img {
+    /* ADJUST THIS PERCENTAGE TO RESIZE */
+    width: 95%; 
+    
+    height: auto;
+    display: block;
 }
 
 			#header .logo .icon:before {
