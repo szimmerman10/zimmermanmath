@@ -1295,10 +1295,10 @@ input, select, textarea {
     border: solid 1px #ffffff;
     border-radius: 100%;
 
-    /* Image replacement logic */
-    background-size: cover;      /* Scales image to fill the area */
-    background-position: center; /* Centers the image */
-    background-repeat: no-repeat;
+/* New properties for images */
+    display: block;        /* Ensures it respects width/height */
+    object-fit: cover;     /* Crops the image to fill the circle without distorting */
+    overflow: hidden;      /* Ensures the image doesn't bleed past the rounded border */
 }
 
 			#header .logo .icon:before {
