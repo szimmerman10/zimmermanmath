@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Interactive Contact Structures</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #111;
+            /* Mobile optimization: prevent pull-to-refresh and browser-level panning */
+            touch-action: none; 
+        }
+    </style>
+</head>
+<body>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+                "lil-gui": "https://unpkg.com/lil-gui@0.19.1/dist/lil-gui.esm.min.js"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import GUI from 'lil-gui';
+
+        // 1. Setup Scene, Camera, and Renderer
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x111111, 0.02);
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.01, 1000);
+        camera.up.set(0, 0, 1);
+        
+        const defaultCameraPos = new THREE.Vector3(15, 12, 12);
+        const defaultTarget = new THREE.Vector3(0, 0, 4.0);
+        
+        camera.position.copy(defaultCameraPos);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.body.appendChild(renderer.domElement);
+
+        // 1.5 Setup Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 2.5);
+        dirLight.position.set(10, 10, 20);
+        scene.add(dirLight);
+
+        const pointLight = new THREE.PointLight(0x0088ff, 100, 50);
+        pointLight.position.set(-10, -5, 5);
+        scene.add(pointLight);
+
+        // 2. Add Orbit Controls
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.target.copy(defaultTarget); 
+
+        // 3. Add Axes Helper
+        const axesHelper = new THREE.AxesHelper(10);
+        axesHelper.setColors(0x808080, 0x808080, 0x808080); 
+        scene.add(axesHelper);
+
+        // 3.5. Add Starfield (Distant)
+        const starGeometry = new THREE.BufferGeometry();
+        const starCount = 6000;
+        const starPositions = new Float32Array(starCount * 3);
+        
+        const minDistance = 60;  
+        const maxDistance = 300; 
+
+        for(let i = 0; i < starCount; i++) {
+            let x = (Math.random() - 0.5) * 2;
+            let y = (Math.random() - 0.5) * 2;
+            let z = (Math.random() - 0.5) * 2;
+
+            let mag = Math.sqrt(x*x + y*y + z*z);
+            if (mag === 0) { x = 1; mag = 1; }
+            
+            const distance = minDistance + Math.random() * (maxDistance - minDistance);
+            
+            starPositions[i * 3]     = (x / mag) * distance;
+            starPositions[i * 3 + 1] = (y / mag) * distance;
+            starPositions[i * 3 + 2] = (z / mag) * distance;
+        }
+
+        starGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+        const starMaterial = new THREE.PointsMaterial({ color: 0xffffff, size: 0.15, sizeAttenuation: true, fog: false });
+        const stars = new THREE.Points(starGeometry, starMaterial);
+        scene.add(stars);
+
+        // 4. GUI Settings State
+        const settings = {
+            contactForm: 'Symmetric', // 'Symmetric' or 'Darboux'
+            showPlanes: false,
+            showVectorFieldX: false,
+            showVectorFieldY: false,
+            showZZeroOnly: false,
+            pointSpacing: 1.0, 
+            showCurve: false,
+            flyAlongCurve: function() { startFlight(); } 
+        };
+
+        // 5. Build the Planes and Vectors (Optimized with InstancedMesh)
+        const planeGeometry = new THREE.CircleGeometry(0.25, 32); 
+        const planeMaterial = new THREE.MeshNormalMaterial({
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: 0.85
+        });
+
+        const totalPlanes = 11 * 11 * 9;
+        const instancedPlanes = new THREE.InstancedMesh(planeGeometry, planeMaterial, totalPlanes);
+        instancedPlanes.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        scene.add(instancedPlanes);
+
+        // Vector Field Geometries
+        const arrowLength = 0.5; // Exactly spans the radius of the plane disks
+        // Tapered cylinder acts as an elegant 3D dart/arrow
+        const arrowGeo = new THREE.CylinderGeometry(0, 0.025, arrowLength, 8);
+        
+        // Shift the cylinder up so its base is at the origin (0,0,0) instead of its center
+        arrowGeo.translate(0, arrowLength / 2, 0); 
+        // Rotate to point along local +Z axis so the lookAt function orients it correctly
+        arrowGeo.rotateX(Math.PI / 2); 
+
+        const materialX = new THREE.MeshPhongMaterial({ color: 0xFEFE62, emissive: 0x220000 }); // Red for X
+        const materialY = new THREE.MeshPhongMaterial({ color: 0xD35FB7, emissive: 0x002200 }); // Green for Y
+
+        const instancedX = new THREE.InstancedMesh(arrowGeo, materialX, totalPlanes);
+        const instancedY = new THREE.InstancedMesh(arrowGeo, materialY, totalPlanes);
+        
+        instancedX.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        instancedY.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        
+        scene.add(instancedX);
+        scene.add(instancedY);
+
+        const dummy = new THREE.Object3D();
+
+        function updatePlanes() {
+            instancedPlanes.visible = settings.showPlanes;
+            instancedX.visible = settings.showVectorFieldX;
+            instancedY.visible = settings.showVectorFieldY;
+
+            // Bail early if nothing is visible to save CPU
+            if (!settings.showPlanes && !settings.showVectorFieldX && !settings.showVectorFieldY) return;
+
+            const spacing = settings.pointSpacing;
+            let index = 0;
+
+            for (let i = -5; i <= 5; i++) {
+                for (let j = -5; j <= 5; j++) {
+                    for (let k = 0; k <= 8; k++) {
+                        const showElement = settings.showZZeroOnly ? (k === 0) : true;
+                        
+                        const x = i * spacing;
+                        const y = j * spacing;
+                        const z = k * spacing;
+
+                        if (showElement) {
+                            // Update Plane
+                            if (settings.showPlanes) {
+                                dummy.position.set(x, y, z);
+                                let nx, ny, nz;
+                                if (settings.contactForm === 'Symmetric') {
+                                    nx = -0.5 * y; ny = 0.5 * x; nz = 1;
+                                } else if (settings.contactForm === 'Darboux') {
+                                    nx = -y; ny = 0; nz = 1;
+                                }
+                                dummy.lookAt(x + nx, y + ny, z + nz);
+                                dummy.scale.set(1, 1, 1);
+                                dummy.updateMatrix();
+                                instancedPlanes.setMatrixAt(index, dummy.matrix);
+                            }
+
+                            // Update Vector Field X
+                            if (settings.showVectorFieldX) {
+                                dummy.position.set(x, y, z);
+                                let vx = 1, vy = 0, vz = 0;
+                                if (settings.contactForm === 'Symmetric') {
+                                    vz = 0.5 * y;
+                                } else {
+                                    vz = y;
+                                }
+                                dummy.lookAt(x + vx, y + vy, z + vz);
+                                dummy.scale.set(1, 1, 1);
+                                dummy.updateMatrix();
+                                instancedX.setMatrixAt(index, dummy.matrix);
+                            }
+
+                            // Update Vector Field Y
+                            if (settings.showVectorFieldY) {
+                                dummy.position.set(x, y, z);
+                                let ux = 0, uy = 1, uz = 0;
+                                if (settings.contactForm === 'Symmetric') {
+                                    uz = -0.5 * x;
+                                } else {
+                                    uz = 0;
+                                }
+                                dummy.lookAt(x + ux, y + uy, z + uz);
+                                dummy.scale.set(1, 1, 1);
+                                dummy.updateMatrix();
+                                instancedY.setMatrixAt(index, dummy.matrix);
+                            }
+                        } else {
+                            // Collapse matrices to 0 to hide individual instances off the z=0 plane
+                            dummy.scale.set(0, 0, 0);
+                            dummy.updateMatrix();
+                            if (settings.showPlanes) instancedPlanes.setMatrixAt(index, dummy.matrix);
+                            if (settings.showVectorFieldX) instancedX.setMatrixAt(index, dummy.matrix);
+                            if (settings.showVectorFieldY) instancedY.setMatrixAt(index, dummy.matrix);
+                        }
+
+                        index++;
+                    }
+                }
+            }
+            if (settings.showPlanes) instancedPlanes.instanceMatrix.needsUpdate = true;
+            if (settings.showVectorFieldX) instancedX.instanceMatrix.needsUpdate = true;
+            if (settings.showVectorFieldY) instancedY.instanceMatrix.needsUpdate = true;
+        }
+        
+        updatePlanes();
+
+        // 6. Build the Parametric Legendrian Curves
+        class SymmetricLegendrianCurve extends THREE.Curve {
+            constructor() { super(); }
+            getPoint(t, optionalTarget = new THREE.Vector3()) {
+                const tScaled = t * Math.PI * 2;
+                const x = 1.5 + 1.5 * Math.cos(tScaled + Math.PI);
+                const y = 1.5 * Math.sin(tScaled);
+                const z = (9/8) * tScaled - (9/8) * Math.sin(tScaled);
+                return optionalTarget.set(x, y, z);
+            }
+        }
+
+        class DarbouxLegendrianCurve extends THREE.Curve {
+            constructor() { super(); }
+            getPoint(t, optionalTarget = new THREE.Vector3()) {
+                // Scale to 4*PI to get two full periods of the curve
+                const tScaled = t * Math.PI * 4; 
+                
+                const x = Math.sin(tScaled);
+                const y = Math.cos(tScaled) - 1.0;
+                const z = (tScaled / 2.0) + (0.25 * Math.sin(2.0 * tScaled)) - Math.sin(tScaled);
+                
+                return optionalTarget.set(x, y, z);
+            }
+        }
+
+        const symmetricPath = new SymmetricLegendrianCurve();
+        const darbouxPath = new DarbouxLegendrianCurve();
+        
+        let activePath = symmetricPath; // Default path
+        
+        const tubeMaterial = new THREE.MeshPhysicalMaterial({ 
+            color: 0x000000,
+            emissive: 0xC0C0C0,
+            roughness: 0.8,
+            metalness: 0.7,
+            clearcoat: 1.0,
+            clearcoatRoughness: 0.1,
+            reflectivity: 1.0
+        }); 
+        
+        const curveMesh = new THREE.Mesh(new THREE.TubeGeometry(activePath, 512, 0.04, 32, false), tubeMaterial);
+        curveMesh.visible = settings.showCurve;
+        scene.add(curveMesh);
+
+        // 7. Setup GUI Menu
+        const gui = new GUI({ title: 'Contact Structure' });
+
+        gui.add(settings, 'contactForm', ['Symmetric', 'Darboux'])
+           .name('Contact Form')
+           .onChange((value) => {
+               // Update planes visual
+               updatePlanes();
+               
+               // Swap active curve and rebuild geometry
+               activePath = value === 'Symmetric' ? symmetricPath : darbouxPath;
+               curveMesh.geometry.dispose(); // Free up memory
+               curveMesh.geometry = new THREE.TubeGeometry(activePath, 512, 0.04, 32, false);
+           });
+        
+        const planesController = gui.add(settings, 'showPlanes')
+           .name('Show Planes')
+           .onChange(updatePlanes);
+
+        gui.add(settings, 'showVectorFieldY').name('Show Vector Field X').onChange(updatePlanes);
+	gui.add(settings, 'showVectorFieldX').name('Show Vector Field Y').onChange(updatePlanes);
+        
+
+        gui.add(settings, 'showZZeroOnly').name('Show Only z=0 Planes').onChange(updatePlanes);
+        gui.add(settings, 'pointSpacing', 0.2, 3.0, 0.1).name('Point Spacing').onChange(updatePlanes);
+        
+        const curveController = gui.add(settings, 'showCurve')
+           .name('Show Legendrian Curve')
+           .onChange(value => { curveMesh.visible = value; });
+
+        gui.add(settings, 'flyAlongCurve').name('✈️ Fly Along Curve');
+
+        // --- Custom Footer Injection ---
+        const footerStyle = document.createElement('style');
+        footerStyle.innerHTML = `
+            .gui-footer-text a { color: #8ec0ff; text-decoration: none; }
+            .gui-footer-text a:hover { text-decoration: underline; color: #fff; }
+            .gui-footer-text img { vertical-align: middle; }
+        `;
+        document.head.appendChild(footerStyle);
+
+        const footerContainer = document.createElement('div');
+        footerContainer.className = 'gui-footer-text';
+        Object.assign(footerContainer.style, {
+            padding: '12px 10px',
+            fontSize: '11px',
+            lineHeight: '1.4',
+            color: '#aaa',
+            borderTop: '1px solid #333',
+            marginTop: '5px',
+            fontFamily: 'sans-serif'
+        });
+
+        footerContainer.innerHTML = `
+            <a href="https://szimmerman10.github.io/szimmerman10/heisenberg.html">Interactive Heisenberg Group</a> © 2026 by <a href="https://www.zimmermanmath.com">Scott Zimmerman</a> is licensed under <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/">CC BY-NC-SA 4.0</a><img src="https://mirrors.creativecommons.org/presskit/icons/cc.svg" alt="" style="max-width: 1em;max-height:1em;margin-left: .2em;"><img src="https://mirrors.creativecommons.org/presskit/icons/by.svg" alt="" style="max-width: 1em;max-height:1em;margin-left: .2em;"><img src="https://mirrors.creativecommons.org/presskit/icons/nc.svg" alt="" style="max-width: 1em;max-height:1em;margin-left: .2em;"><img src="https://mirrors.creativecommons.org/presskit/icons/sa.svg" alt="" style="max-width: 1em;max-height:1em;margin-left: .2em;">. Created using <a href="https://gemini.google.com/">Google Gemini.</a>
+        `;
+        
+        gui.domElement.appendChild(footerContainer);
+
+        // Flight Animation Variables
+        let flightState = 0; 
+        let animStartTime = 0;
+        
+        const transitionDuration = 1000; 
+        const flightDuration = 10000;    
+        const FLIGHT_OFFSET = 0.2; 
+
+        const startTransPos = new THREE.Vector3();
+        const startTransTarget = new THREE.Vector3();
+        const endTransPos = new THREE.Vector3();
+        const endTransTarget = new THREE.Vector3();
+
+        function startFlight() {
+            if (flightState !== 0) return; 
+            
+            flightState = 1; 
+            animStartTime = performance.now();
+            controls.enabled = false;
+            
+            settings.showCurve = true;
+            curveMesh.visible = true;
+            curveController.updateDisplay();
+
+            settings.showPlanes = true;
+            updatePlanes();
+            planesController.updateDisplay();
+
+            startTransPos.copy(camera.position);
+            startTransTarget.copy(controls.target);
+
+            // Use the currently active path
+            const startPoint = activePath.getPoint(0);
+            const startTangent = activePath.getTangent(0);
+
+            endTransPos.copy(startPoint);
+            endTransPos.z += FLIGHT_OFFSET; 
+
+            endTransTarget.copy(startPoint).add(startTangent);
+            endTransTarget.z += FLIGHT_OFFSET; 
+        }
+
+        // 8. Animation Loop
+        function animate(time) {
+            requestAnimationFrame(animate);
+            time = time || performance.now();
+
+            if (flightState === 1) {
+                let t = (time - animStartTime) / transitionDuration;
+                
+                if (t >= 1.0) {
+                    t = 1.0;
+                    flightState = 2; 
+                    animStartTime = time; 
+                } else {
+                    t = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+                }
+
+                camera.position.lerpVectors(startTransPos, endTransPos, t);
+                
+                const currentTarget = new THREE.Vector3();
+                currentTarget.lerpVectors(startTransTarget, endTransTarget, t);
+                camera.lookAt(currentTarget);
+
+            } else if (flightState === 2) {
+                const t = (time - animStartTime) / flightDuration;
+
+                if (t >= 1.0) {
+                    flightState = 3;
+                    animStartTime = time;
+
+                    startTransPos.copy(camera.position);
+                    
+                    const lastPoint = activePath.getPoint(1.0);
+                    const lastTangent = activePath.getTangent(1.0);
+                    startTransTarget.copy(lastPoint).add(lastTangent);
+                    startTransTarget.z += FLIGHT_OFFSET;
+
+                    endTransPos.copy(defaultCameraPos);
+                    endTransTarget.copy(defaultTarget);
+
+                } else {
+                    const point = activePath.getPoint(t);
+                    const tangent = activePath.getTangent(t);
+
+                    camera.position.copy(point);
+                    camera.position.z += FLIGHT_OFFSET; 
+                    
+                    const lookAtTarget = point.clone().add(tangent);
+                    lookAtTarget.z += FLIGHT_OFFSET; 
+                    camera.lookAt(lookAtTarget);
+                }
+            } else if (flightState === 3) {
+                let t = (time - animStartTime) / transitionDuration;
+
+                if (t >= 1.0) {
+                    flightState = 0;
+                    controls.enabled = true;
+                    
+                    camera.position.copy(defaultCameraPos);
+                    camera.up.set(0, 0, 1);
+                    controls.target.copy(defaultTarget);
+                    camera.lookAt(controls.target);
+                    controls.update();
+                } else {
+                    t = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+
+                    camera.position.lerpVectors(startTransPos, endTransPos, t);
+                    
+                    const currentTarget = new THREE.Vector3();
+                    currentTarget.lerpVectors(startTransTarget, endTransTarget, t);
+                    camera.lookAt(currentTarget);
+                }
+            } else {
+                controls.update();
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        // 9. Handle Window Resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Start animation
+        animate();
+    </script>
+</body>
+</html>
