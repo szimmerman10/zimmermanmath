@@ -179,7 +179,6 @@ input, select, textarea {
 		font-weight: 600;
 		line-height: 1.5;
 		margin: 0 0 1rem 0;
-		text-transform: uppercase;
 		letter-spacing: 0.2rem;
 	}
 
@@ -382,7 +381,6 @@ input, select, textarea {
 		letter-spacing: 0.2rem;
 		line-height: 1.5;
 		margin: 0 0 1rem 0;
-		text-transform: uppercase;
 	}
 
 	input[type="text"],
@@ -1027,7 +1025,6 @@ input, select, textarea {
 		padding: 0 1.25rem 0 1.35rem;
 		text-align: center;
 		text-decoration: none;
-		text-transform: uppercase;
 		white-space: nowrap;
 	}
 
@@ -1358,7 +1355,6 @@ input, select, textarea {
 				}
 
 			#header .content p {
-				text-transform: uppercase;
 				letter-spacing: 0.2rem;
 				font-size: 0.8rem;
 				line-height: 2;
